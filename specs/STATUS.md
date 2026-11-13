@@ -4,23 +4,27 @@ Last updated: 2026-11-13.
 
 ## Resume here
 
-**Spec:** [02-line-recorder.md](02-line-recorder.md), task **T2.3**.
+**Spec:** [03-mapping-grading.md](03-mapping-grading.md), task **T3.1**.
 
 **State of the tree:** `main` holds everything finished. Tests pass (`uv run pytest`:
-83). Work in progress, if any, is on a `feat/...` branch named in the log below.
+121). Work in progress, if any, is on a `feat/...` branch named in the log below.
 
 **Next three steps:**
 
-1. T2.3 to T2.5: raw envelopes, the mirror importer and the loader.
-2. T2.9: import the mirror's history into the real database.
-3. Spec 03: map and grade those lines.
+1. Spec 03: map the 80,891 imported lines to players, games and stats, and grade them.
+2. Spec 02, T2.6 and T2.7: the PrizePicks and Odds API adapters (neither blocks the
+   model or the backtest, which run on the mirror's lines).
+3. Spec 04: the projection model.
+
+**Local data** (not in git; rebuild with `better nba sync --from 2019` and
+`better lines snapshot`): nine seasons of box scores, 306 line snapshots.
 
 ## Board
 
 | # | Spec | Status | Notes |
 |---|---|---|---|
 | 01 | [NBA data](01-nba-data.md) | verified | 2018-19 to 2026-27 loaded |
-| 02 | [Line recorder](02-line-recorder.md) | in progress | schema and stat catalogue done |
+| 02 | [Line recorder](02-line-recorder.md) | in progress | recorder and mirror import verified; two adapters to write |
 | 03 | [Mapping and grading](03-mapping-grading.md) | not started | views exist |
 | 04 | [Projection model](04-projection-model.md) | not started | |
 | 05 | [Backtest](05-backtest.md) | not started | |
@@ -46,6 +50,8 @@ None of these block the build. Each is one setting or one command when decided.
 
 Newest first. One line per finished task or notable event.
 
+- 2026-11-13: Line recorder merged: raw snapshot files, loader, mirror importer,
+  `better lines snapshot|rebuild|status`. Real import: 306 snapshots, 80,891 lines.
 - 2026-11-13: Specs written for every part. Work now goes through small pull requests
   into `main` (decision D9).
 - 2026-11-13: Stat catalogue and lines schema committed (`20d159b`).

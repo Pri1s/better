@@ -1,6 +1,7 @@
 # 02. Line recorder
 
-**Status:** in progress. Schema and stat catalogue built; adapters and loader not yet.
+**Status:** in progress. The recorder, the loader and the mirror importer are verified
+on real data. The PrizePicks and Odds API adapters are not written yet.
 
 ## Purpose
 
@@ -74,6 +75,7 @@ name. URLs are stored with `apiKey` removed.
 | `mirror.py` | Clone or fetch the mirror; turn each commit's file into an envelope; parse it. |
 | `oddsapi.py` | Events list, per-event odds, credit estimate; parse bookmakers and markets. |
 | `store.py` | Load envelopes into `line_snapshots` and `prop_lines`; rebuild; status. |
+| `commands.py` | The `better lines` commands. |
 
 Every parser is a pure function `parse(envelope) -> Parsed`. Every fetcher takes an
 injectable session so tests never touch the network.
@@ -111,19 +113,45 @@ better lines status
 
 - [x] T2.1 Stat catalogue and name tables (`better.stats`). R2.12 groundwork.
 - [x] T2.2 `line_snapshots`, `prop_lines` and helper views (`sql/lines.sql`).
-- [ ] T2.3 `raw.py` and `rows.py`: envelope round trip, deterministic bytes. R2.1, R2.2.
-- [ ] T2.4 `mirror.py`: parser for every row shape seen in history; git import. R2.5,
-      R2.10, R2.11.
-- [ ] T2.5 `store.py`: load, idempotence, self-healing, rebuild. R2.2, R2.3, R2.4.
+- [x] T2.3 `raw.py` and `rows.py`: envelope round trip, deterministic bytes. R2.1, R2.2.
+      Tests: `tests/test_lines_raw.py`.
+- [x] T2.4 `mirror.py`: parser for every row shape seen in history; git import. R2.5,
+      R2.10, R2.11. Tests: `tests/test_lines_mirror.py`.
+- [x] T2.5 `store.py`: load, idempotence, self-healing, rebuild. R2.2, R2.3, R2.4.
+      Tests: `tests/test_lines_store.py`.
 - [ ] T2.6 `prizepicks.py`: parser, opt-in gate, refusal handling. R2.6, R2.7, R2.11.
 - [ ] T2.7 `oddsapi.py`: sweep, credit guard, key redaction, goblin/demon rule. R2.8,
       R2.9, R2.12.
-- [ ] T2.8 CLI `better lines snapshot|rebuild|status`.
-- [ ] T2.9 Import the full mirror history into the real database; record counts below.
+- [x] T2.8 CLI `better lines snapshot|rebuild|status` (mirror source only so far).
+- [x] T2.9 Import the full mirror history into the real database; record counts below.
 
 ## Results
 
-Not yet run.
+**Mirror import, 2026-11-13.** `better lines snapshot --source mirror`, 13 seconds
+including the clone; `better lines rebuild` reproduces it from the raw files.
+
+| | |
+|---|---|
+| Snapshots | 306, from 2025-12-06 15:29 UTC to 2026-11-12 12:06 UTC |
+| Lines stored | 80,891 |
+| Rows skipped | 5,109, all `no_start_time`, all in the very first commit |
+| Standard / demon / goblin | 76,838 / 2,492 / 1,561 |
+| Combo lines | 681, nearly all in December 2025 |
+| Unreadable files | 0 |
+
+Lines per month: 2025-12 22,343 · 2026-01 8,491 · 2026-02 6,898 · 2026-03 11,248 ·
+2026-04 12,050 · 2026-05 5,806 · 2026-06 1,375 · 2026-08 189 · 2026-09 466 ·
+2026-10 5,849 · 2026-11 6,176.
+
+What the data showed that the plan had not assumed:
+
+- Every goblin and demon line comes from two commits on 2025-12-06, and those rows
+  name no team. Spec 03 gained a requirement (R3.12) to link a line with no team
+  through the player.
+- The start time sits in three different fields across the history. The parser tries
+  each in turn.
+- December 2025 has several scrapes a day (57 snapshots in 23 days); from January 2026
+  it is one a day near 12:05 UTC.
 
 ## Limits and open questions
 

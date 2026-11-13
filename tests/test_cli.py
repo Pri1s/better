@@ -7,12 +7,6 @@ from better import cli, config, db
 from better.nba import load
 
 
-@pytest.fixture
-def data_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("BETTER_DATA_DIR", str(tmp_path))
-    return tmp_path
-
-
 def test_data_dir_can_be_moved(data_dir):
     assert config.db_path() == data_dir / "better.duckdb"
     assert config.raw_dir() == data_dir / "raw"

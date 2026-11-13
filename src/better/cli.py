@@ -1,4 +1,8 @@
-"""Command line entry point: ``better nba sync`` and ``better nba status``."""
+"""Command line entry point.
+
+``better nba ...`` is defined here. Every other group lives beside its code in a
+``commands`` module that registers itself with the parser.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +13,7 @@ from collections.abc import Sequence
 import duckdb
 
 from better import config, db
+from better.lines import commands as lines_commands
 from better.nba import load, seasons, sources
 from better.nba import sync as nba_sync
 
@@ -49,8 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--refresh", action="store_true",
         help="download again and reload seasons that are already loaded",
     )
+    sync.set_defaults(handler=_sync)
 
-    commands.add_parser("status", help="show what is loaded and how fresh it is")
+    status = commands.add_parser("status", help="show what is loaded and how fresh it is")
+    status.set_defaults(handler=_status)
+
+    lines_commands.register(groups)
     return parser
 
 
@@ -58,9 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     con = db.connect()
     try:
-        if args.command == "sync":
-            return _sync(con, args)
-        return _status(con)
+        return args.handler(con, args)
     finally:
         con.close()
 
@@ -82,7 +89,7 @@ def _sync(con: duckdb.DuckDBPyConnection, args: argparse.Namespace) -> int:
     return 0
 
 
-def _status(con: duckdb.DuckDBPyConnection) -> int:
+def _status(con: duckdb.DuckDBPyConnection, args: argparse.Namespace) -> int:
     rows = con.execute(
         """
         SELECT
