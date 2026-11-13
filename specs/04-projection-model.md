@@ -1,6 +1,6 @@
 # 04. Projection model
 
-**Status:** not started.
+**Status:** in progress.
 
 ## Purpose
 
@@ -59,12 +59,16 @@ box scores, schedule, injury reports
 One pass over game dates in order. For each date: **emit** a feature row for every
 player in that date's games from the current state, **then update** the state with that
 date's box scores. Nothing from a date can reach its own rows, by construction (R4.1 to
-R4.3). State is held in numpy arrays indexed by player and by team.
+R4.3). State is held in numpy arrays indexed by player and by team. DNP rows are emitted
+with missing targets; they affect availability but do not train the minutes/stat means.
+`through` filters dates in SQL, and `outcomes_through` can freeze outcome state while
+emitting future schedule rows. Injury status frequencies use only earlier games;
+unseen statuses stay missing until observed.
 
 Player state (updated only by games he played, unless noted):
 
-- Exponentially weighted sums of each box-score component and of minutes, at two
-  half-lives (6 and 30 games), giving per-minute rates.
+- Exponentially weighted sums of each box-score component and of minutes, at three
+  half-lives (6, 30 and 120 games), giving per-minute rates.
 - Exponentially weighted minutes, minutes squared (for volatility) and starts.
 - Season-to-date totals; previous-season per-minute rates.
 - Last game: date, minutes, started.
@@ -129,7 +133,9 @@ per-minute rate times weighted recent minutes.
 
 - Counts: negative binomial, variance `mean + alpha * mean^2`, with
   `log(alpha) = g0 + g1 * log(mean) + g2 * minutes_cv + g3 * started_share`.
-- Fantasy score: gamma with the same form for `log(1 / shape)`.
+- Fantasy score: normal, because turnover deductions can make the score negative.
+  Fit `log(variance) = g0 + g1 * log(max(abs(mean), 1)) + g2 * minutes_cv
+  + g3 * started_share`; outcomes lie on a grid of tenths (decision D10).
 - Fitted per stat by maximum likelihood (L-BFGS) on out-of-sample means.
 
 **Calibration.** For each stat, compute the randomised probability integral transform of
@@ -163,7 +169,7 @@ CREATE TABLE IF NOT EXISTS predictions (
     cutoff_utc      TIMESTAMP NOT NULL,
     trained_through DATE     NOT NULL,
     block           VARCHAR  NOT NULL,
-    family          VARCHAR  NOT NULL,   -- negbin | gamma | bernoulli
+    family          VARCHAR  NOT NULL,   -- negbin | normal | bernoulli
     proj_minutes    DOUBLE,
     mean            DOUBLE   NOT NULL,
     dispersion      DOUBLE,
@@ -184,24 +190,25 @@ better model predict [--date DATE]    predictions for upcoming games on the boar
 
 ## Tasks
 
-- [ ] T4.1 `dist.py` with tests against scipy and by simulation. R4.6.
-- [ ] T4.2 `features.py` forward pass on the fixture season; hand-checked values. R4.1,
+- [x] T4.1 `dist.py` with tests against scipy and by simulation. R4.6.
+- [x] T4.2 `features.py` forward pass on the fixture season; hand-checked values. R4.1,
       R4.3, R4.10.
-- [ ] T4.3 The leak test: alter outcomes from a date on, features before unchanged. R4.2.
-- [ ] T4.4 Status weights measured from the database; injury features. R4.1.
+- [x] T4.3 The leak test: alter outcomes from a date on, features before unchanged. R4.2.
+- [x] T4.4 Status weights measured strictly from earlier games; injury features. R4.1.
 - [ ] T4.5 `blocks.py`, `minutes.py`, `statmodel.py`; pipeline on a small synthetic
       league where the true rates are known. R4.4, R4.5.
-- [ ] T4.6 `dispersion.py`, `calibrate.py` recover known parameters from simulated data.
+- [x] T4.6 `dispersion.py`, `calibrate.py` recover known parameters from simulated data.
       R4.7.
 - [ ] T4.7 `pipeline.py` writes `predictions`; `better model fit`. R4.9.
 - [ ] T4.8 `evaluate.py` and `better model evaluate`. R4.8.
 - [ ] T4.9 Run on the real database; record accuracy and calibration below; fix what the
       calibration table shows.
-- [ ] T4.10 `better model predict` for upcoming games.
+- [x] T4.10 `better model predict` for upcoming games.
 
 ## Results
 
-Not yet run.
+Distribution families, dispersion recovery, calibration and the forward feature pass
+are covered by synthetic and fixture tests. Real-data accuracy awaits T4.9.
 
 ## Limits and open questions
 

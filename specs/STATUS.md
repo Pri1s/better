@@ -4,18 +4,18 @@ Last updated: 2026-11-13.
 
 ## Resume here
 
-**Spec:** [04-projection-model.md](04-projection-model.md), task **T4.1**.
+**Spec:** [04-projection-model.md](04-projection-model.md), task **T4.5**.
 
-**State of the tree:** `main` holds everything finished. Tests pass (`uv run pytest`:
-172). Work in progress, if any, is on a `feat/...` branch named in the log below.
+**State of the tree:** Model distribution families, the forward feature pass, injury
+weights, dispersion and calibration are built and tested (T4.1–T4.4, T4.6). The
+walk-forward pipeline and CLI are being completed next.
 
 **Next three steps:**
 
-1. Spec 04: the projection model, starting with the distribution maths (T4.1) and the
-   forward-pass feature builder (T4.2, T4.3).
-2. Spec 05: the backtest, on the 52,172 graded standard picks now in the database.
-3. Spec 02, T2.6 and T2.7: the PrizePicks and Odds API adapters (neither blocks the
-   model or the backtest, which run on the mirror's lines).
+1. Finish the walk-forward pipeline, accuracy report and live prediction commands
+   (T4.5, T4.7–T4.10), using only outcomes before 2026-10-01.
+2. Backtest the development window with the holdout sealed.
+3. Entry builder, adapters, sportsbook comparison and daily operations.
 
 **Local data** (not in git; rebuild with `better nba sync --from 2019` and
 `better lines snapshot`): nine seasons of box scores, 306 line snapshots, all mapped.
@@ -30,7 +30,7 @@ no model at all (spec 03, Results).
 | 01 | [NBA data](01-nba-data.md) | verified | 2018-19 to 2026-27 loaded |
 | 02 | [Line recorder](02-line-recorder.md) | in progress | recorder and mirror import verified; two adapters to write |
 | 03 | [Mapping and grading](03-mapping-grading.md) | verified | 96.7% of lines linked; links audited |
-| 04 | [Projection model](04-projection-model.md) | not started | |
+| 04 | [Projection model](04-projection-model.md) | in progress | features and distribution/calibration maths built |
 | 05 | [Backtest](05-backtest.md) | not started | |
 | 06 | [Sportsbook comparison](06-market-comparison.md) | not started | optional; needs a key to run live |
 | 07 | [Entry builder](07-entry-builder.md) | not started | |
@@ -53,6 +53,10 @@ None of these block the build. Each is one setting or one command when decided.
 ## Log
 
 Newest first. One line per finished task or notable event.
+
+- 2026-11-13: Resumed interrupted model branch. Completed forward-pass features,
+  empirical injury weights and leakage tests; added spread fitting and calibration.
+  Fantasy score now supports negative values (D10).
 
 - 2026-11-13: Mapping and grading merged. 78,211 of 80,891 lines linked; 52,172 unique
   graded standard picks over 186 nights. Unders win 51.8% untouched.

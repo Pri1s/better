@@ -118,3 +118,16 @@ messages and pull request descriptions carry no AI attribution.
 **Note.** The repository is public, so nothing under `data/`, no `.env` and no API key
 is ever committed. The two earliest commits predate the attribution rule and were
 already published; they are left as they are rather than rewriting public history.
+
+## D10. Fantasy score needs support below zero (2026-11-13)
+
+**Decision.** Fantasy score uses a normal predictive family with fitted variance and
+a CDF calibration map, evaluated on a grid of tenths. Counts retain the negative
+binomial family, and flags retain Bernoulli.
+
+**Why.** The stat definition subtracts turnovers. A player can finish with a negative
+fantasy score, which a gamma distribution cannot represent. Rounding boundaries
+determine probability mass and pushes; a line between grid points cannot push.
+
+**Cost.** The normal family can place mass on implausibly low scores. Earlier-block
+calibration and the line-free log score expose that limitation.

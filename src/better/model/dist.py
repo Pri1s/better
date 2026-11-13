@@ -4,8 +4,8 @@ Every stat gets one of three families:
 
 ``negbin``     a count (points, rebounds, their sums). Negative binomial with
                variance ``mean + dispersion * mean**2``. Dispersion 0 is a Poisson.
-``gamma``      a weighted score that is not a whole number (fantasy score). Gamma
-               with variance ``dispersion * mean**2``, read on a grid of tenths.
+``normal``     fantasy score, including negative scores, on a grid of tenths.
+               ``dispersion`` is its variance.
 ``bernoulli``  something that happens or does not (double-double). ``mean`` is the
                probability; there is no dispersion.
 
@@ -14,6 +14,9 @@ calibrated one. It is fitted on past out-of-sample predictions (see ``calibrate`
 and applied here, so every probability the project reports goes through one place.
 
 All functions accept arrays and broadcast.
+
+``gamma`` remains available for positive scores and compatibility; its variance
+is ``dispersion * mean**2``. It is not used for fantasy score.
 """
 
 from __future__ import annotations
@@ -28,8 +31,9 @@ from better.stats import COUNT, FLAG, SCORE, Stat
 
 NEGBIN = "negbin"
 GAMMA = "gamma"
+NORMAL = "normal"
 BERNOULLI = "bernoulli"
-FAMILY_OF_KIND = {COUNT: NEGBIN, SCORE: GAMMA, FLAG: BERNOULLI}
+FAMILY_OF_KIND = {COUNT: NEGBIN, SCORE: NORMAL, FLAG: BERNOULLI}
 
 # PrizePicks prints a fantasy score to one decimal, so that is the grid it lives on.
 SCORE_STEP = 0.1
@@ -48,6 +52,19 @@ class Calibration:
     x: np.ndarray
     y: np.ndarray
 
+    def __post_init__(self):
+        x, y = np.array(self.x, dtype=float), np.array(self.y, dtype=float)
+        if (
+            x.ndim != 1 or y.shape != x.shape or len(x) < 2
+            or not np.all(np.isfinite(x)) or not np.all(np.isfinite(y))
+            or np.any(np.diff(x) <= 0) or np.any(np.diff(y) < 0)
+            or x[0] != 0 or x[-1] != 1 or y[0] != 0 or y[-1] != 1
+        ):
+            raise ValueError("calibration knots must increase from (0, 0) to (1, 1)")
+        x.flags.writeable = y.flags.writeable = False
+        object.__setattr__(self, "x", x)
+        object.__setattr__(self, "y", y)
+
     def __call__(self, u: np.ndarray) -> np.ndarray:
         return np.interp(u, self.x, self.y)
 
@@ -62,13 +79,17 @@ IDENTITY = Calibration(np.array([0.0, 1.0]), np.array([0.0, 1.0]))
 def cdf(family: str, x, mean, dispersion=0.0) -> np.ndarray:
     """P(X <= x) under the family, before any calibration."""
     x = np.asarray(x, dtype=float)
-    mean = np.maximum(np.asarray(mean, dtype=float), _MIN_MEAN)
+    mean = np.asarray(mean, dtype=float)
     dispersion = np.asarray(dispersion, dtype=float)
     if family == NEGBIN:
-        return _negbin_cdf(np.floor(x), mean, dispersion)
+        value = _negbin_cdf(np.floor(x), np.maximum(mean, _MIN_MEAN), dispersion)
+        return np.where(mean == 0, (x >= 0).astype(float), value)
     if family == GAMMA:
+        mean = np.maximum(mean, _MIN_MEAN)
         shape = 1.0 / np.maximum(dispersion, 1e-6)
         return np.where(x <= 0, 0.0, special.gammainc(shape, np.maximum(x, 0.0) * shape / mean))
+    if family == NORMAL:
+        return special.ndtr((x - mean) / np.sqrt(np.maximum(dispersion, 1e-6)))
     if family == BERNOULLI:
         p = np.clip(mean, 0.0, 1.0)
         return np.where(x < 0, 0.0, np.where(x < 1, 1.0 - p, 1.0))
@@ -84,10 +105,16 @@ def probabilities(
     against a half-point line.
     """
     line = np.asarray(line, dtype=float)
-    if family == GAMMA:
+    if family in (GAMMA, NORMAL):
         # Values sit on a grid of tenths: "over 31.5" means 31.6 or more.
-        below = calibration(cdf(family, line - SCORE_STEP / 2, mean, dispersion))
-        at_or_below = calibration(cdf(family, line + SCORE_STEP / 2, mean, dispersion))
+        scaled = line / SCORE_STEP
+        on_grid = np.isclose(scaled, np.round(scaled), rtol=0, atol=1e-9)
+        grid = np.where(on_grid, np.round(scaled), np.floor(scaled)) * SCORE_STEP
+        at_or_below = calibration(cdf(family, grid + SCORE_STEP / 2, mean, dispersion))
+        below = np.where(
+            on_grid, calibration(cdf(family, grid - SCORE_STEP / 2, mean, dispersion)),
+            at_or_below,
+        )
     else:
         on_grid = np.floor(line) == line
         at_or_below = calibration(cdf(family, np.floor(line), mean, dispersion))
@@ -109,7 +136,7 @@ def pit(family: str, y, mean, dispersion=0.0, rng: np.random.Generator | None = 
     the basis for calibration.
     """
     y = np.asarray(y, dtype=float)
-    if family == GAMMA:
+    if family in (GAMMA, NORMAL):
         upper = cdf(family, y + SCORE_STEP / 2, mean, dispersion)
         lower = cdf(family, y - SCORE_STEP / 2, mean, dispersion)
     else:
@@ -122,7 +149,7 @@ def pit(family: str, y, mean, dispersion=0.0, rng: np.random.Generator | None = 
 def log_likelihood(family: str, y, mean, dispersion=0.0) -> np.ndarray:
     """Log probability (or density) of observed values."""
     y = np.asarray(y, dtype=float)
-    mean = np.maximum(np.asarray(mean, dtype=float), _MIN_MEAN)
+    mean = np.asarray(mean, dtype=float)
     dispersion = np.asarray(dispersion, dtype=float)
     if family == NEGBIN:
         poisson = sps.poisson.logpmf(y, mean)
@@ -130,11 +157,19 @@ def log_likelihood(family: str, y, mean, dispersion=0.0) -> np.ndarray:
         negbin = sps.nbinom.logpmf(y, size, size / (size + mean))
         return np.where(dispersion < _POISSON_BELOW, poisson, negbin)
     if family == GAMMA:
+        mean = np.maximum(mean, _MIN_MEAN)
         shape = 1.0 / np.maximum(dispersion, 1e-6)
         return sps.gamma.logpdf(np.maximum(y, SCORE_STEP / 2), shape, scale=mean / shape)
+    if family == NORMAL:
+        # Use the left tail on either side: subtracting two CDFs near 1 loses
+        # every significant digit. log_ndtr keeps even remote tails finite.
+        sd = np.sqrt(np.maximum(dispersion, 1e-6))
+        distance = np.abs(y - mean)
+        log_upper = special.log_ndtr((-distance + SCORE_STEP / 2) / sd)
+        log_lower = special.log_ndtr((-distance - SCORE_STEP / 2) / sd)
+        return log_upper + np.log(-np.expm1(log_lower - log_upper))
     if family == BERNOULLI:
-        p = np.clip(mean, 1e-9, 1 - 1e-9)
-        return np.where(y >= 0.5, np.log(p), np.log1p(-p))
+        return sps.bernoulli.logpmf(y, np.clip(mean, 0, 1))
     raise ValueError(f"unknown family {family!r}")
 
 
@@ -145,6 +180,8 @@ def variance(family: str, mean, dispersion=0.0) -> np.ndarray:
         return mean + dispersion * mean**2
     if family == GAMMA:
         return dispersion * mean**2
+    if family == NORMAL:
+        return np.broadcast_arrays(mean, dispersion)[1]
     if family == BERNOULLI:
         return mean * (1.0 - mean)
     raise ValueError(f"unknown family {family!r}")
@@ -152,15 +189,18 @@ def variance(family: str, mean, dispersion=0.0) -> np.ndarray:
 
 def median(family: str, mean, dispersion=0.0) -> np.ndarray:
     """The value the stat is as likely to fall at or below as above."""
-    mean = np.maximum(np.asarray(mean, dtype=float), _MIN_MEAN)
+    mean = np.asarray(mean, dtype=float)
     dispersion = np.asarray(dispersion, dtype=float)
     if family == NEGBIN:
         size = 1.0 / np.maximum(dispersion, _POISSON_BELOW)
         negbin = sps.nbinom.ppf(0.5, size, size / (size + mean))
         return np.where(dispersion < _POISSON_BELOW, sps.poisson.ppf(0.5, mean), negbin)
     if family == GAMMA:
+        mean = np.maximum(mean, _MIN_MEAN)
         shape = 1.0 / np.maximum(dispersion, 1e-6)
         return sps.gamma.ppf(0.5, shape, scale=mean / shape)
+    if family == NORMAL:
+        return mean
     if family == BERNOULLI:
         return (mean >= 0.5).astype(float)
     raise ValueError(f"unknown family {family!r}")
