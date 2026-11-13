@@ -33,6 +33,10 @@ results without any error. This part prefers leaving a line unlinked to guessing
   alias can be written.
 - **R3.10** Aliases SHALL come from a file shipped with the package and a local file in
   the data directory, both reloaded on every run.
+- **R3.12** WHEN a line names no team at all, THE SYSTEM SHALL find the player by exact
+  key or alias across the league for the season implied by the start date, and then the
+  one game on that date involving a team he has played for that season. More than one
+  such player or game leaves the line unlinked.
 - **R3.11** `graded_lines.result` SHALL be `over`, `under` or `push` for a player who
   played in a final game; `void` when he did not play or the game was not played;
   `pending` before the game is final; `unlinked` otherwise.
@@ -87,7 +91,8 @@ better lines unmatched [--limit N]
 ## Tasks
 
 - [ ] T3.1 Fixture lines covering every branch (exact, alias, suffix, league fallback,
-      ambiguous, combo, no game, no stat, both-teams form). Tests for R3.1 to R3.8.
+      ambiguous, combo, no game, no stat, both-teams form, no team). Tests for R3.1 to
+      R3.8 and R3.12.
 - [ ] T3.2 `mapping.py` to pass them.
 - [ ] T3.3 `better lines map` and `better lines unmatched`. R3.9, R3.10.
 - [ ] T3.4 Grading tests on the fixture season: over, under, push, void by DNP, void by
