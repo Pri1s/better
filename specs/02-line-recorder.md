@@ -136,7 +136,7 @@ including the clone; `better lines rebuild` reproduces it from the raw files.
 | Lines stored | 80,891 |
 | Rows skipped | 5,109, all `no_start_time`, all in the very first commit |
 | Standard / demon / goblin | 76,838 / 2,492 / 1,561 |
-| Combo lines | 433, nearly all in December 2025 |
+| Combo lines | 681, nearly all in December 2025 |
 | Unreadable files | 0 |
 
 Lines per month: 2025-12 22,343 · 2026-01 8,491 · 2026-02 6,898 · 2026-03 11,248 ·
