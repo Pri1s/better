@@ -157,12 +157,8 @@ def _load_file(con: duckdb.DuckDBPyConnection, path: Path, raw_root: Path) -> Lo
                 json.dumps(detail, sort_keys=True),
             ],
         )
-        if parsed.rows:
-            con.register("incoming_lines", _columns(envelope, parsed.rows))
-            try:
-                con.execute(_INSERT)
-            finally:
-                con.unregister("incoming_lines")
+        insert_lines(con, envelope.snapshot_id, envelope.source, envelope.fetched_at_utc,
+                     parsed.rows)
         con.execute("COMMIT")
     except BaseException:
         con.execute("ROLLBACK")
@@ -170,7 +166,26 @@ def _load_file(con: duckdb.DuckDBPyConnection, path: Path, raw_root: Path) -> Lo
     return result
 
 
-def _columns(envelope: raw.Envelope, lines: list[rows.LineRow]) -> dict[str, np.ndarray]:
+def insert_lines(
+    con: duckdb.DuckDBPyConnection,
+    snapshot_id: str,
+    source: str,
+    fetched_at_utc: datetime,
+    lines: list[rows.LineRow],
+) -> None:
+    """Append one snapshot's rows to ``prop_lines``, numbered in the order given."""
+    if not lines:
+        return
+    con.register("incoming_lines", _columns(snapshot_id, source, fetched_at_utc, lines))
+    try:
+        con.execute(_INSERT)
+    finally:
+        con.unregister("incoming_lines")
+
+
+def _columns(
+    snapshot_id: str, source: str, fetched_at_utc: datetime, lines: list[rows.LineRow]
+) -> dict[str, np.ndarray]:
     """The rows as one array per column, which DuckDB reads far faster than row inserts.
 
     Times and flags travel as text and every column is cast in SQL, so a column that
@@ -190,10 +205,10 @@ def _columns(envelope: raw.Envelope, lines: list[rows.LineRow]) -> dict[str, np.
         return None if value is None else ("true" if value else "false")
 
     columns: dict[str, np.ndarray] = {
-        "snapshot_id": objects([envelope.snapshot_id] * count),
+        "snapshot_id": objects([snapshot_id] * count),
         "line_no": np.arange(1, count + 1, dtype=np.int64),
-        "source": objects([envelope.source] * count),
-        "fetched_at_utc": objects([moment(envelope.fetched_at_utc)] * count),
+        "source": objects([source] * count),
+        "fetched_at_utc": objects([moment(fetched_at_utc)] * count),
     }
     for name in _TEXT:
         columns[name] = objects([getattr(line, name) for line in lines])
