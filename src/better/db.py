@@ -7,7 +7,7 @@ from pathlib import Path
 
 import duckdb
 
-from better import config
+from better import config, stats
 
 MEMORY = ":memory:"
 
@@ -30,5 +30,10 @@ def connect(path: Path | str | None = None) -> duckdb.DuckDBPyConnection:
 
 def apply_schema(con: duckdb.DuckDBPyConnection) -> None:
     """Create missing tables and (re)create views and macros. Safe to run every time."""
-    sql = resources.files("better").joinpath("sql/schema.sql").read_text(encoding="utf-8")
-    con.execute(sql)
+    package = resources.files("better")
+    con.execute(package.joinpath("sql/schema.sql").read_text(encoding="utf-8"))
+    # The stat views are generated from the catalogue in better.stats, so that a stat
+    # is defined in exactly one place. lines.sql builds on them.
+    con.execute(stats.stat_views_sql())
+    con.execute(f"CREATE OR REPLACE VIEW stat_names AS SELECT * FROM {stats.name_table_sql()}")
+    con.execute(package.joinpath("sql/lines.sql").read_text(encoding="utf-8"))
