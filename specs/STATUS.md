@@ -4,20 +4,24 @@ Last updated: 2026-11-13.
 
 ## Resume here
 
-**Spec:** [03-mapping-grading.md](03-mapping-grading.md), task **T3.1**.
+**Spec:** [04-projection-model.md](04-projection-model.md), task **T4.1**.
 
 **State of the tree:** `main` holds everything finished. Tests pass (`uv run pytest`:
-121). Work in progress, if any, is on a `feat/...` branch named in the log below.
+172). Work in progress, if any, is on a `feat/...` branch named in the log below.
 
 **Next three steps:**
 
-1. Spec 03: map the 80,891 imported lines to players, games and stats, and grade them.
-2. Spec 02, T2.6 and T2.7: the PrizePicks and Odds API adapters (neither blocks the
+1. Spec 04: the projection model, starting with the distribution maths (T4.1) and the
+   forward-pass feature builder (T4.2, T4.3).
+2. Spec 05: the backtest, on the 52,172 graded standard picks now in the database.
+3. Spec 02, T2.6 and T2.7: the PrizePicks and Odds API adapters (neither blocks the
    model or the backtest, which run on the mirror's lines).
-3. Spec 04: the projection model.
 
 **Local data** (not in git; rebuild with `better nba sync --from 2019` and
-`better lines snapshot`): nine seasons of box scores, 306 line snapshots.
+`better lines snapshot`): nine seasons of box scores, 306 line snapshots, all mapped.
+
+**The number to beat:** on standard lines the under wins 51.8% of decided picks with
+no model at all (spec 03, Results).
 
 ## Board
 
@@ -25,7 +29,7 @@ Last updated: 2026-11-13.
 |---|---|---|---|
 | 01 | [NBA data](01-nba-data.md) | verified | 2018-19 to 2026-27 loaded |
 | 02 | [Line recorder](02-line-recorder.md) | in progress | recorder and mirror import verified; two adapters to write |
-| 03 | [Mapping and grading](03-mapping-grading.md) | not started | views exist |
+| 03 | [Mapping and grading](03-mapping-grading.md) | verified | 96.7% of lines linked; links audited |
 | 04 | [Projection model](04-projection-model.md) | not started | |
 | 05 | [Backtest](05-backtest.md) | not started | |
 | 06 | [Sportsbook comparison](06-market-comparison.md) | not started | optional; needs a key to run live |
@@ -50,6 +54,8 @@ None of these block the build. Each is one setting or one command when decided.
 
 Newest first. One line per finished task or notable event.
 
+- 2026-11-13: Mapping and grading merged. 78,211 of 80,891 lines linked; 52,172 unique
+  graded standard picks over 186 nights. Unders win 51.8% untouched.
 - 2026-11-13: Line recorder merged: raw snapshot files, loader, mirror importer,
   `better lines snapshot|rebuild|status`. Real import: 306 snapshots, 80,891 lines.
 - 2026-11-13: Specs written for every part. Work now goes through small pull requests

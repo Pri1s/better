@@ -110,6 +110,9 @@ keys AS (
                          ELSE regexp_extract(name, '([^ ]+)$', 1) END)
     FROM named
     UNION
+    -- The mirror sometimes prints the city twice: 'New York New York Knicks'.
+    SELECT team_id, name_key(regexp_replace(name, ' [^ ]+$', '') || ' ' || name) FROM named
+    UNION
     SELECT n.team_id, name_key(o.code) FROM named n JOIN other_codes o USING (nba_abbreviation)
     UNION
     SELECT n.team_id, name_key(o.alias) FROM named n JOIN other_names o USING (nba_abbreviation)
@@ -121,12 +124,16 @@ GROUP BY key
 HAVING count(DISTINCT team_id) = 1;
 
 -- Who has been on each team's box scores in each season, keyed for name matching.
+-- A player who was traded has one row per team, with the dates he appeared for each.
 CREATE OR REPLACE VIEW roster_names AS
-SELECT DISTINCT season, team_id, player_id,
+SELECT season, team_id, player_id,
        name_key(player_name) AS name_key,
-       name_key_no_suffix(player_name) AS name_key_no_suffix
+       name_key_no_suffix(player_name) AS name_key_no_suffix,
+       min(game_date) AS first_game_date,
+       max(game_date) AS last_game_date
 FROM player_game_stats
-WHERE player_name IS NOT NULL;
+WHERE player_name IS NOT NULL
+GROUP BY ALL;
 
 -- ---------------------------------------------------------------------------
 -- Grading

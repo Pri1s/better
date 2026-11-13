@@ -8,7 +8,7 @@ import sys
 import duckdb
 
 from better import config
-from better.lines import mirror, store
+from better.lines import mapping, mirror, store
 
 MIRROR = "mirror"
 SOURCES = (MIRROR,)
@@ -37,6 +37,23 @@ def register(groups: argparse._SubParsersAction) -> None:
     )
     rebuild.set_defaults(handler=_rebuild)
 
+    map_parser = commands.add_parser(
+        "map",
+        help="link lines to games, players and stats",
+        description=(
+            "Link every recorded line to a game, a player and a stat. Safe to repeat: run "
+            "it again after adding an alias or loading new box scores."
+        ),
+    )
+    map_parser.set_defaults(handler=_map)
+
+    unmatched = commands.add_parser(
+        "unmatched", help="list lines that could not be linked, and why"
+    )
+    unmatched.add_argument("--limit", type=int, default=30, metavar="N",
+                           help="how many groups to show (default: 30)")
+    unmatched.set_defaults(handler=_unmatched)
+
     status = commands.add_parser("status", help="show what has been recorded")
     status.set_defaults(handler=_status)
 
@@ -52,11 +69,52 @@ def _snapshot(con: duckdb.DuckDBPyConnection, args: argparse.Namespace) -> int:
         except mirror.MirrorError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-    return _report(store.load_pending(con, raw_root))
+    return _loaded(con, store.load_pending(con, raw_root))
 
 
 def _rebuild(con: duckdb.DuckDBPyConnection, args: argparse.Namespace) -> int:
-    return _report(store.rebuild(con, config.raw_dir()))
+    return _loaded(con, store.rebuild(con, config.raw_dir()))
+
+
+def _loaded(con: duckdb.DuckDBPyConnection, loaded: list[store.Loaded]) -> int:
+    """Report what was loaded and link it."""
+    code = _report(loaded)
+    if loaded:
+        print(mapping.map_lines(con, [item.snapshot_id for item in loaded]).line())
+    return code
+
+
+def _map(con: duckdb.DuckDBPyConnection, args: argparse.Namespace) -> int:
+    store.load_pending(con, config.raw_dir())
+    summary = mapping.map_lines(con)
+    print(summary.line())
+    if summary.by_match.get("league"):
+        print(f"{summary.by_match['league']:,} of the linked lines found their player outside "
+              "the two teams' rosters (a line with no team, a trade, or a season's first night).")
+    return 0
+
+
+def _unmatched(con: duckdb.DuckDBPyConnection, args: argparse.Namespace) -> int:
+    groups = mapping.unmatched(con, args.limit)
+    if not groups:
+        print("Every line is linked, or mapping has not run yet (better lines map).")
+        return 0
+    header = ("reason", "player", "team", "lines", "first", "last", "example stat", "closest names")
+    table = [header] + [
+        (
+            group["link_status"], group["player_name"], group["team"] or "",
+            f"{group['lines']:,}", str(group["first_date"]), str(group["last_date"]),
+            group["example_stat"], ", ".join(group["closest"] or []),
+        )
+        for group in groups
+    ]
+    widths = [max(len(str(row[i])) for row in table) for i in range(len(header))]
+    for row in table:
+        print("  ".join(str(cell).ljust(width) for cell, width in zip(row, widths, strict=True))
+              .rstrip())
+    print(f"\nTo fix a name, add a line to {config.data_dir() / mapping.LOCAL_ALIAS_FILE} "
+          "(header: alias,player) and run: better lines map")
+    return 0
 
 
 def _report(loaded: list[store.Loaded]) -> int:
@@ -110,6 +168,20 @@ def _status(con: duckdb.DuckDBPyConnection, args: argparse.Namespace) -> int:
         cells = [str(row[0]).ljust(widths[0])]
         cells += [str(cell).rjust(width) for cell, width in zip(row[1:], widths[1:], strict=True)]
         print("  ".join(cells))
+
+    links = con.execute(
+        "SELECT coalesce(link_status, 'not mapped yet'), count(*) FROM prop_lines "
+        "GROUP BY 1 ORDER BY 2 DESC"
+    ).fetchall()
+    total = sum(count for _, count in links)
+    if total:
+        print("Links:  " + ", ".join(f"{count:,} {status}" for status, count in links))
+        results = con.execute(
+            "SELECT result, count(*) FROM graded_lines WHERE link_status = 'linked' "
+            "GROUP BY 1 ORDER BY 2 DESC"
+        ).fetchall()
+        if results:
+            print("Graded: " + ", ".join(f"{count:,} {result}" for result, count in results))
 
     stale = store.stale_snapshots(con)
     if stale:
